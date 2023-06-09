@@ -1,0 +1,72 @@
+name: Build and Test
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: 14
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build and Test
+        run: npm run build && npm run test
+
+      - name: Build Docker image (x86_64)
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: false
+
+      - name: Build Docker image (arm64)
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/arm64
+          push: false
+
+      - name: Scan Docker image for vulnerabilities (Trivy)
+        run: docker run --rm aquasec/trivy:latest --exit-code 0 --severity HIGH --no-progress <your-image-name>
+
+      - name: Log Docker image layers
+        run: docker inspect <your-image-name> --format='{{range .RootFS.Layers}}{{.}} {{end}}'
+
+      - name: Login to GitHub Packages
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and Push Docker image to GitHub Packages (x86_64)
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository }}/image-x86_64:${{ github.sha }}
+
+      - name: Tag and Push Docker image to GitHub Packages (arm64)
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: ghcr.io/${{ github.repository }}/image-arm64:${{ github.sha }}
